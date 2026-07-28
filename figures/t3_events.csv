@@ -1,0 +1,7 @@
+episode,t0,t1,PC1_bps,PC2_bps,PC3_bps,residual_share
+2004-06 Fed hikes ('Greenspan's conundrum'),2004-06-30,2006-06-29,497.7,-498.2,-29.6,0.059
+2007-08 GFC easing to zero,2007-09-18,2008-12-16,-799.2,451.0,-17.3,0.049
+2013 Taper tantrum,2013-05-22,2013-09-05,161.7,65.7,45.1,0.084
+2020 COVID crash to zero,2020-02-19,2020-03-23,-285.0,174.5,-18.5,0.057
+2022-23 inflation fight (deepest inversion since 1981),2022-03-16,2023-07-26,687.5,-621.7,64.3,0.094
+2024- easing cycle / dis-inversion,2024-09-18,2026-07-23,184.2,135.6,-40.0,0.053

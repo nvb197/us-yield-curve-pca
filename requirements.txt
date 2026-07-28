@@ -1,0 +1,9 @@
+pandas>=2.0
+numpy>=1.26
+matplotlib>=3.8
+statsmodels>=0.14
+scikit-learn>=1.4
+fredapi>=0.5
+pytest>=8.0
+# optional, only needed to open/re-run notebooks/analysis.ipynb yourself:
+notebook>=7.0

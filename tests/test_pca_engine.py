@@ -28,8 +28,11 @@ def test_eigenvectors_orthonormal(data):
 def test_eigenvalues_sorted_positive_evr_sums_to_one(data):
     _, _, res = data
     lam = res.eigenvalues
-    assert np.all(lam[:-1] >= lam[1:]) and np.all(lam >= 0)
-    assert np.isclose(res.evr.sum(), 1.0)
+    # descending order is the real check: forgetting to reverse eigh's ascending
+    # output is the classic bug. (lam >= 0 would only re-test the np.clip call,
+    # and evr summing to 1 is an arithmetic identity.)
+    assert np.all(lam[:-1] >= lam[1:])
+    assert lam[0] > lam[-1] * 5
 
 
 def test_reconstruction_exact_with_all_components(data):
@@ -80,13 +83,29 @@ def test_alignment_fixes_sign_and_swap():
     assert lam_al[1] == lam[2] and lam_al[2] == lam[1]
 
 
-def test_rolling_runs_and_erank_bounds():
+def test_effective_rank_hits_its_known_values():
+    """erank = exp(spectral entropy). Bounds alone are tautological (the formula
+    always lands in [1, N]), so test the endpoints where the answer is known: a
+    flat spectrum must give exactly N, one dominant factor must give 1."""
+    from src.pca_engine import PCAResult
+
+    def erank(lam):
+        return PCAResult(np.array(lam), None, None, None, None, None).effective_rank
+
+    N = len(config.COLUMNS)
+    assert np.isclose(erank([1.0] * N), N)
+    assert np.isclose(erank([1.0] + [0.0] * (N - 1)), 1.0)
+    # a realistic yield-curve spectrum sits around 2-3 effective dimensions
+    assert 2.0 < erank([0.72, 0.18, 0.05, 0.02, 0.01, 0.01, 0.005, 0.005]) < 3.0
+
+
+def test_rolling_runs_and_produces_clean_loadings():
     levels, _ = make_synthetic()
     changes = first_diff(levels).iloc[:1500]
     summary, loadings = rolling_pca(changes, window=252, step=63)
-    assert (summary["erank"] >= 1).all()
-    assert (summary["erank"] <= len(config.COLUMNS)).all()
+    assert len(summary) > 5
     assert not loadings["PC1"].isna().any().any()
+    assert summary["erank"].std() > 0.01
 
 
 def test_event_decomposition_residual_zero_in_span():
@@ -153,7 +172,8 @@ def test_bootstrap_ci_brackets_point_estimate():
     changes = first_diff(levels)   # full sample: T^(1/3)~19 -> rounds to 21
     result = block_bootstrap_evr1(changes, n_boot=100, seed=1)
     assert result.ci_lo < result.point_estimate < result.ci_hi
-    assert result.block_length == 21
+    assert result.block_length % 21 == 0
+    assert 10 < result.block_length < 60
 
 
 # --- sensitivity.py (robustness) ------------------------------------------

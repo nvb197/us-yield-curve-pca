@@ -190,7 +190,6 @@ def hedging_comparison(pnl: pd.DataFrame):
 def ns_pca_comparison(ns_loadings_matrix, pca_V, corr_df):
     """NS parametric loadings against PCA statistical loadings, plus the
     correlation heatmap between the two methods' factors."""
-    import numpy as np
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 3.8))
     x = config.MATURITIES
     for j, name in enumerate(["Level", "Slope", "Curvature"]):

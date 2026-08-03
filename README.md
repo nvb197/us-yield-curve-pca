@@ -113,8 +113,9 @@ hedging decompositions), cross-checked against scikit-learn to ~1e-12. Every
 module carries docstrings explaining the design decisions and the traps behind
 them; the step-by-step narrative with results is in `notebooks/analysis.ipynb`;
 unit tests
-(20, covering PCA invariants, alignment, event decomposition, hedging
-identities, resampling behaviour, and robustness checks) are in `tests/`.
+(28, covering PCA invariants, alignment, event decomposition, hedging
+identities, resampling behaviour, robustness checks, and degenerate inputs
+that must fail loudly rather than return NaN) are in `tests/`.
 
 ## Limitations & outlook
 PCA is a descriptive, real-world-measure (P) tool: no dynamics, no
@@ -127,7 +128,7 @@ direction I aim to study formally next.
 pip install -r requirements.txt
 export FRED_API_KEY=your_key        # free at fred.stlouisfed.org
 python -m src.run_all               # fetch -> SQLite -> every figure and table
-pytest -q                           # 20 tests, no network needed
+pytest -q                           # 28 tests, no network needed
 ```
 `notebooks/analysis.ipynb` is the full narrative. It auto-detects: with
 `FRED_API_KEY` set it fetches real data; without it, it runs on generated
@@ -155,7 +156,7 @@ core,events,rolling` (also `hedging`, `stats`, `nelson_siegel`,
 │   └── run_all.py         # single entrypoint, 8 selectable stages
 ├── notebooks/
 │   └── analysis.ipynb     # full narrative in English
-├── tests/                 # 20 pytest cases, no network needed
+├── tests/                 # 28 pytest cases, no network needed
 ├── figures/               # generated plots and tables
 └── requirements.txt
 ```

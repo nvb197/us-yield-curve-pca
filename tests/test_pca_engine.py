@@ -262,3 +262,75 @@ def test_ns_and_pca_factors_agree():
     d = diagonal_strength(factor_correlation(ns, scores))
     assert d["mean_diagonal_abs_corr"] > 0.80
     assert d["max_offdiagonal_abs_corr"] < d["min_diagonal_abs_corr"]
+
+# --- edge cases: fail loudly instead of returning NaN or crashing ---------
+
+def test_zero_variance_tenor_does_not_produce_nan():
+    """A tenor pinned at zero (ZIRP, stale feed) must not turn the whole
+    correlation-mode decomposition into NaN."""
+    X = pd.DataFrame(np.random.default_rng(0).standard_normal((300, 8)) * 0.05,
+                     columns=config.COLUMNS)
+    X["m3"] = 0.0
+    res = fit_pca(X, mode="corr")
+    assert not np.isnan(res.eigenvalues).any()
+    assert not np.isnan(res.eigenvectors).any()
+
+
+def test_collinear_hedge_instruments_raise_clearly():
+    from src.hedging import long_position, pc_hedge
+
+    levels, _ = make_synthetic()
+    V = fit_pca(first_diff(levels), mode="cov").eigenvectors
+    with pytest.raises(ValueError, match="collinear"):
+        pc_hedge(long_position("y10", 100e6), V, ("y2", "y2"))
+
+
+def test_pnl_rejects_incomplete_curve():
+    from src.hedging import long_position
+
+    with pytest.raises(ValueError, match="missing tenors"):
+        long_position("y10", 100e6).pnl(pd.Series({"y10": 0.10}))
+
+
+def test_block_length_never_degrades_to_iid():
+    """block_length=1 would silently turn the block bootstrap into an iid
+    bootstrap and destroy the autocorrelation it exists to preserve."""
+    from src.resampling import block_bootstrap_evr1
+
+    levels, _ = make_synthetic()
+    short = first_diff(levels).iloc[:400]
+    assert block_bootstrap_evr1(short, n_boot=20).block_length >= 21
+
+
+def test_ns_loadings_handle_zero_maturity():
+    """Overnight rates mean tau=0, a removable singularity whose limit is 1."""
+    from src.nelson_siegel import ns_loadings
+
+    H = ns_loadings([0.0, 0.25, 1.0])
+    assert not np.isnan(H).any()
+    assert np.isclose(H[0, 1], 1.0)      # slope loading -> 1
+    assert np.isclose(H[0, 2], 0.0)      # curvature loading -> 0
+
+
+def test_alignment_detects_swaps_for_any_k():
+    """The old version hardcoded the PC2/PC3 pair, so k=2 silently disabled
+    swap detection."""
+    rng = np.random.default_rng(0)
+    Q, _ = np.linalg.qr(rng.standard_normal((8, 8)))
+    V_new = Q.copy()
+    V_new[:, [0, 1]] = V_new[:, [1, 0]]
+    _, _, swapped = align_to_previous(V_new, np.arange(8, 0, -1.0), Q, k=2)
+    assert swapped
+
+
+def test_rolling_rejects_too_short_a_sample():
+    levels, _ = make_synthetic()
+    with pytest.raises(ValueError, match="at least"):
+        rolling_pca(first_diff(levels).iloc[:100], window=252)
+
+
+def test_event_decomposition_rejects_degenerate_windows():
+    levels, _ = make_synthetic()
+    V = fit_pca(first_diff(levels), mode="cov").eigenvectors
+    with pytest.raises(ValueError, match="after its start"):
+        decompose_episode(levels, V, "2020-01-01", "2010-01-01")

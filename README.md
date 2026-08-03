@@ -12,33 +12,41 @@
 
 ![The slope factor tracks the policy cycle](figures/00_hero_timeline.png)
 
-Three risk factors drive almost everything the US Treasury curve does. This
-project extracts them from scratch (hand-written eigendecomposition, no black
-box) and uses them to re-read six famous macro episodes, from Greenspan's
-conundrum to the 2022 inflation fight. It also tests a hypothesis I started
-with and had to abandon: that crises compress the curve toward one dimension.
-They don't. They rotate it.
+Three factors explain about 95% of what the US Treasury curve does day to day.
+I built the whole thing from scratch, including the eigendecomposition, then
+used the factors to read back six Fed policy episodes.
+
+I also started with a hypothesis that turned out to be wrong. I thought crises
+squeeze the curve toward one dimension. They don't. They rotate it.
 
 ## Motivation
-Litterman & Scheinkman (1991) showed that ~95%+ of bond return variance is
-explained by three factors. This is a conceptual replication of that
-stylized fact, same phenomenon, different data (Δ par yields, 2000–present,
-vs. their bond excess returns), plus questions they could not ask in 1991:
-what do the factors say about each macro episode since, is the structure
-stable, and what does it mean for hedging a real book?
+Litterman and Scheinkman found the three-factor structure in 1991. I rebuilt it
+on data they never saw: daily par yield changes from 2000 to now, where they
+used bond excess returns from the eighties. Same phenomenon, different data, so
+this is a conceptual replication rather than a direct one.
+
+Then two questions they couldn't ask in 1991. What do the factors say about
+each Fed cycle since? And does the structure survive a crisis?
 
 ## The three factors
-`figures/02_loadings.png`, PC1 ≈ parallel level shifts (**71.8%** of
-variance), PC2 ≈ slope / the policy cycle (**18.3%**), PC3 ≈ curvature
-(**5.1%**). Economic validation: corr(PC1, mean Δy) = **0.999**;
-corr(cumulative PC2, 10Y–2Y spread) = **0.897**.
+PC1 is a parallel level shift and takes 71.8% of the variance. PC2 is slope,
+which is really the policy cycle, at 18.3%. PC3 is curvature at 5.1%. Loadings
+are in `figures/02_loadings.png`.
+
+Shape alone doesn't prove they are what I say they are, so I checked both
+against quantities computed straight from the raw data. PC1 against the average
+change across all eight maturities: 0.999. Cumulative PC2 against the 10Y–2Y
+spread: 0.897.
 
 ## Reading 25 years of macro through the factors
-`figures/05_episodes.png`, each episode's total curve move decomposed into
-factor contributions on the covariance basis (bps units). Windows are
-anchored *ex ante* to documented events (FOMC decisions, the Bernanke
-testimony, the unlimited-QE announcement, see `src/config.py::EPISODES`),
-never chosen from the chart; residual shares are reported for every episode.
+For each episode I take the total curve move and project it onto the three
+factors. Covariance basis, so the contributions come out in basis points.
+
+Start and end dates come from documented events: FOMC decisions, the Bernanke
+testimony, the unlimited-QE announcement. They are written into
+`src/config.py::EPISODES` before I look at any output, not picked off the
+chart. Residuals are reported for every episode, so if three factors don't
+span a move, it shows.
 
 | Episode | Regime | Factor signature |
 |---|---|---|
@@ -50,30 +58,33 @@ never chosen from the chart; residual shares are reported for every episode.
 | 2024– easing | Bear steepening | PC1 +184 with PC2 +136 — bear steepening, not the bull steepening I predicted |
 
 ## Does the structure hold still?
-`figures/04_rolling.png`, 252-day rolling PCA with eigenvector alignment
-(sign fixing plus PC2/PC3 swap detection: eigenvectors are only defined up to
-sign, and up to rotation when eigenvalues nearly coincide).
+252-day rolling window, stepping a month at a time (`figures/04_rolling.png`).
+Eigenvectors are only defined up to sign, and up to rotation when two
+eigenvalues sit close together, so each window gets aligned against the
+previous one.
 
-I expected crises to squeeze the curve toward one dimension, with PC1 spiking
-above 90%. That is well documented for cross-asset risk, but it does not hold
-inside the Treasury curve. PC1 stays in a 70-83% band for the whole sample and
-the highest reading lands in January 2002, not 2008 or 2020. Measured in basis
-points the curve actually becomes more multi-dimensional in a crisis, because
-the dominant move is the Fed slamming the front end while the long end sits
-still, and that slope shock adds variance orthogonal to level.
+I expected PC1 to spike above 90% in a crisis. That happens in cross-asset
+risk and it's well documented. It does not happen here. PC1 stays between 70%
+and 83% for the whole sample, and the highest reading is January 2002, not 2008
+or 2020.
 
-So the three-factor structure is more stable than I assumed. What does break it
-is not a crisis but the zero-rate era: from 2008 to 2017 PC1 explains only 63%
-and the curvature factor sits 20.7 degrees off the full-sample one, because a
-pinned front end stops moving altogether.
+Measured in basis points the curve gets *more* multi-dimensional in a crisis,
+not less. The dominant move is the Fed slamming the front end while the long
+end sits still. That's a slope shock, and it adds variance orthogonal to level,
+which pushes PC1's share down.
 
-Overlapping windows make this series strongly autocorrelated, so it is
-descriptive, not a significance test.
+So the structure is more stable than I assumed. What actually breaks it is the
+zero-rate era. From 2008 to 2017 PC1 explains only 63% and the curvature factor
+sits 20.7 degrees off the full-sample one. Pin the front end at zero for years
+and it stops moving, which is not something a correlation structure survives.
+
+One caveat: consecutive windows share 231 of their 252 days, so this series is
+heavily autocorrelated. It's descriptive, not a significance test.
 
 ## Appendix
 
-Five checks that back up the three findings above. Each is one module, run by
-`python -m src.run_all --stages <name>`, and written up in
+Five checks behind the findings above. Each is one module, runnable on its own
+with `python -m src.run_all --stages <name>`, and written up in
 `notebooks/analysis.ipynb`.
 
 - `hedging.py`: a duration-neutral 2s10s trade is immune to
@@ -96,32 +107,50 @@ Five checks that back up the three findings above. Each is one module, run by
   functions), regime day-counts (LAG + CASE), computed inside SQLite.
 
 ## Data & design decisions
-Eight constant-maturity tenors {3M…10Y} from FRED, 2000–present. 1M excluded
-(starts 2001, money-market noise); 30Y excluded (discontinued 2002–2006).
-**Missing days are dropped, not forward-filled.** Filling them injects
-artificial zero-change days that shrink measured variance and distort the
-correlation structure, which then distorts the eigenvectors. Dropping costs
-4.1% of days. I ran it both ways and the explained-variance numbers came out
-identical, because uniform zero rows only rescale the covariance matrix and
-scaling does not rotate eigenvectors (details in `src/etl.py`).
+Eight constant-maturity tenors from FRED, 3M through 10Y, 2000 to now.
+
+I left out the 1-month and the 30-year. The 1-month only starts in 2001 and is
+noisy for reasons that have nothing to do with the term structure. The 30-year
+has a worse problem: Treasury stopped issuing it from 2002 to 2006, so keeping
+it would have quietly deleted four years from every other maturity too.
+
+**Missing days are dropped, not forward-filled.** Filling them adds fake
+zero-change days, which shrinks measured variance and distorts the correlation
+structure, and a distorted correlation structure means distorted eigenvectors.
+Dropping costs 4.1% of days.
+
+I ran it both ways out of curiosity and the explained-variance numbers came out
+identical. That makes sense: uniform zero rows just rescale the covariance
+matrix, and scaling doesn't rotate eigenvectors. Free robustness check.
 
 ## Method
-Daily changes (ADF confirms levels are I(1), changes I(0)), then PCA via
-`numpy.linalg.eigh` on both the correlation matrix (structure view, main
-figures) and the covariance matrix (bps units, used for the event-study and
-hedging decompositions), cross-checked against scikit-learn to ~1e-12. Every
-module carries docstrings explaining the design decisions and the traps behind
-them; the step-by-step narrative with results is in `notebooks/analysis.ipynb`;
-unit tests
-(28, covering PCA invariants, alignment, event decomposition, hedging
-identities, resampling behaviour, robustness checks, and degenerate inputs
-that must fail loudly rather than return NaN) are in `tests/`.
+Work on daily changes, not levels. ADF says levels are I(1) and changes are
+I(0), so differencing is both necessary and sufficient.
+
+PCA runs through `numpy.linalg.eigh`, on the correlation matrix for the
+structure view and on the covariance matrix where I need basis points (the
+event study and the hedging section). I wrote the decomposition myself and then
+checked it against scikit-learn. They agree to 1e-12.
+
+The narrative with all the results is in `notebooks/analysis.ipynb`. Design
+decisions and the traps behind them are in the docstrings. The 28 tests in
+`tests/` cover PCA invariants, alignment, event decomposition, hedging
+identities, resampling, robustness, and a set of degenerate inputs that should
+fail loudly instead of quietly returning NaN.
 
 ## Limitations & outlook
-PCA is a descriptive, real-world-measure (P) tool: no dynamics, no
-no-arbitrage constraint, no pricing. The bridge to pricing is affine term
-structure modelling under the risk-neutral measure Q (Vasicek, CIR), the
-direction I aim to study formally next.
+PCA describes what happened. It has no dynamics and no no-arbitrage
+constraint, so it can't price anything. Getting to pricing means affine term
+structure models under the risk-neutral measure, Vasicek or CIR. That's where
+I want to take this next.
+
+The factors also drift. Up to 20.7 degrees in the zero-rate period, so
+"constant structure" is only roughly true, and it's least true exactly when
+things were most unusual.
+
+One more on the data: DGS series are par yields, not zero-coupon. Fine for
+looking at factor shapes, but any pricing work would need a fitted zero curve
+such as the Fed's GSW dataset.
 
 ## Reproduce
 ```bash
@@ -130,10 +159,10 @@ export FRED_API_KEY=your_key        # free at fred.stlouisfed.org
 python -m src.run_all               # fetch -> SQLite -> every figure and table
 pytest -q                           # 28 tests, no network needed
 ```
-`notebooks/analysis.ipynb` is the full narrative. It auto-detects: with
-`FRED_API_KEY` set it fetches real data; without it, it runs on generated
-3-factor data and labels every result as synthetic, so no fake number can be
-quoted by accident. Individual sections: `python -m src.run_all --stages
+`notebooks/analysis.ipynb` has the full narrative. It checks for
+`FRED_API_KEY`: with a key it fetches real data, without one it falls back to
+generated 3-factor data and labels every result as synthetic, so I can't quote
+a fake number by mistake. To run one section at a time: `python -m src.run_all --stages
 core,events,rolling` (also `hedging`, `stats`, `nelson_siegel`,
 `sensitivity`, `sql`).
 

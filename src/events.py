@@ -38,7 +38,14 @@ def decompose_episode(levels: pd.DataFrame, V_cov: np.ndarray,
     """Returns dict with DeltaY, per-factor contribution vectors, residual,
     residual_share, and scalar factor amplitudes (DeltaY . v_j)."""
     y0, y1 = _asof(levels, t0), _asof(levels, t1)
+    if y1.name <= y0.name:
+        raise ValueError(f"Episode end ({y1.name.date()}) must come after its "
+                         f"start ({y0.name.date()}).")
     dY = (y1 - y0).values.astype(float)
+    norm_dY = float(np.linalg.norm(dY))
+    if norm_dY < 1e-12:
+        raise ValueError("The curve is unchanged over this window, so there is "
+                         "no move to decompose.")
     contribs, amps = {}, {}
     total = np.zeros_like(dY)
     for j in range(k):
@@ -55,7 +62,7 @@ def decompose_episode(levels: pd.DataFrame, V_cov: np.ndarray,
         contribs={n: pd.Series(c, index=levels.columns)
                   for n, c in contribs.items()},
         residual=pd.Series(resid, index=levels.columns),
-        residual_share=float(np.linalg.norm(resid) / np.linalg.norm(dY)),
+        residual_share=float(np.linalg.norm(resid) / norm_dY),
         amplitudes=amps,
     )
 

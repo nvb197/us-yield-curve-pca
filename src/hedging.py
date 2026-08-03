@@ -37,12 +37,22 @@ class Position:
     def pnl(self, delta_y: pd.Series) -> float:
         """P&L in $ for a curve move delta_y (percentage points, project-
         wide convention). Delta_P = -sum_i w_i * delta_y_i(bps)."""
-        dy_bps = delta_y.reindex(config.COLUMNS).values * 100
-        return float(-(self.w * dy_bps).sum())
+        dy = delta_y.reindex(config.COLUMNS)
+        if dy.isna().any():
+            missing = [c for c, v in zip(config.COLUMNS, dy.isna()) if v]
+            raise ValueError(f"delta_y is missing tenors {missing}; a partial "
+                             f"curve would silently produce a NaN P&L.")
+        return float(-(self.w * dy.values * 100).sum())
 
     def exposure(self, V_cov: np.ndarray, k: int = 3) -> np.ndarray:
-        """w . v_j for j=1..k -- residual dollar-duration exposure to each
-        PC direction. Zero means fully neutral to that factor."""
+        """w . v_j for j=1..k -- residual exposure to each PC direction.
+        Zero means fully neutral to that factor.
+
+        Units: dollars per one unit of factor amplitude, where amplitude is
+        measured in percentage points (the units v_j lives in). That is 100x
+        the dollars-per-basis-point figure, so divide by 100 to compare these
+        against DV01. Only ratios and zeros matter for hedging, which is what
+        this is used for -- but do not read the raw numbers as DV01."""
         return np.array([self.w @ V_cov[:, j] for j in range(k)])
 
 
@@ -71,6 +81,16 @@ def pc_hedge(base: Position, V_cov: np.ndarray,
     v1, v2 = V_cov[:, 0], V_cov[:, 1]
     A = np.array([[v1[j1], v1[j2]], [v2[j1], v2[j2]]])
     b = -np.array([base.w @ v1, base.w @ v2])
+    # Two instruments whose factor loadings are near-collinear cannot span the
+    # PC1/PC2 plane: the system is singular and any "solution" would demand
+    # enormous offsetting notionals. Fail loudly with the diagnostic rather
+    # than letting LinAlgError escape or returning a meaningless hedge.
+    cond = np.linalg.cond(A)
+    if not np.isfinite(cond) or cond > 1e6:
+        raise ValueError(
+            f"Hedge instruments {hedge_tenors} have near-collinear factor "
+            f"loadings (condition number {cond:.3g}). Pick tenors further "
+            f"apart on the curve.")
     x1, x2 = np.linalg.solve(A, b)
     w = base.w.copy()
     w[j1] += x1

@@ -32,7 +32,11 @@ def ns_loadings(maturities=None, lam: float = LAMBDA) -> np.ndarray:
     """Fixed 3-column design matrix [level | slope | curvature]. Shape (N, 3)."""
     tau = np.asarray(maturities if maturities is not None else config.MATURITIES,
                      dtype=float)
-    decay = (1 - np.exp(-lam * tau)) / (lam * tau)
+    # The slope loading has a removable singularity at tau = 0: the limit is 1
+    # by L'Hopital. Overnight rates (tau = 0) are a realistic input, so handle
+    # it explicitly instead of emitting NaN.
+    with np.errstate(invalid="ignore", divide="ignore"):
+        decay = np.where(tau > 0, (1 - np.exp(-lam * tau)) / (lam * tau), 1.0)
     return np.column_stack([np.ones_like(tau), decay, decay - np.exp(-lam * tau)])
 
 

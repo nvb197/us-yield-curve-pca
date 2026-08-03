@@ -30,14 +30,29 @@ def align_to_previous(V: np.ndarray, lam: np.ndarray,
                       V_prev: np.ndarray, k: int = 3):
     """Return (V, lam, swapped) aligned with the previous window."""
     V, lam = V.copy(), lam.copy()
-    swapped = False
-    if k >= 3:
-        keep = abs(float(V_prev[:, 1] @ V[:, 1]))
-        cross = abs(float(V_prev[:, 1] @ V[:, 2]))
-        if cross > keep:                       # PC2/PC3 traded places
-            V[:, [1, 2]] = V[:, [2, 1]]
-            lam[[1, 2]] = lam[[2, 1]]
-            swapped = True
+
+    # Match every one of the first k new eigenvectors to the previous window's,
+    # by largest |cosine|. Solved as an assignment problem so it works for any
+    # k -- the earlier version only ever checked the PC2/PC3 pair, so calling
+    # this with k=2 silently disabled swap detection entirely.
+    M = np.abs(V_prev[:, :k].T @ V[:, :k])
+    try:
+        from scipy.optimize import linear_sum_assignment
+        rows, cols = linear_sum_assignment(-M)
+    except ImportError:                        # greedy fallback, no scipy
+        cols, taken = [], set()
+        for i in range(k):
+            order = np.argsort(-M[i])
+            pick = next(j for j in order if j not in taken)
+            taken.add(pick)
+            cols.append(pick)
+        rows, cols = np.arange(k), np.array(cols)
+
+    swapped = bool((cols != np.arange(k)).any())
+    idx = np.arange(V.shape[1])
+    idx[:k] = cols
+    V, lam = V[:, idx], lam[idx]
+
     for j in range(k):
         if float(V_prev[:, j] @ V[:, j]) < 0:  # sign flip
             V[:, j] *= -1
@@ -51,6 +66,9 @@ def rolling_pca(changes: pd.DataFrame,
                 k: int = config.N_FACTORS):
     """Returns (summary DataFrame indexed by window-end date,
     loadings dict PCj -> DataFrame[date x tenor])."""
+    if len(changes) < window:
+        raise ValueError(f"Need at least {window} observations for a "
+                         f"{window}-day window, got {len(changes)}.")
     rows, loads = [], {j: [] for j in range(k)}
     V_prev = None
     n_swaps = 0

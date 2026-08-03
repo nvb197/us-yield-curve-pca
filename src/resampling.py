@@ -68,7 +68,14 @@ def block_bootstrap_evr1(changes: pd.DataFrame, n_boot: int = 1000,
     """
     T = len(changes)
     if block_length is None:
-        block_length = max(1, round(T ** (1 / 3) / 21) * 21)  # -> ~21
+        # T^(1/3) is the standard rule of thumb; snap it to whole trading
+        # months for interpretability, but never below one month. A block of
+        # 1 would silently degrade this into an iid bootstrap and destroy the
+        # autocorrelation structure the block scheme exists to preserve.
+        block_length = max(21, round(T ** (1 / 3) / 21) * 21)
+    if block_length >= T:
+        raise ValueError(f"block_length {block_length} must be shorter than "
+                         f"the sample ({T} observations).")
     rng = np.random.default_rng(seed)
     X = changes.values
     n_blocks = int(np.ceil(T / block_length))

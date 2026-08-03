@@ -77,6 +77,17 @@ def fit_pca(changes: pd.DataFrame, mode: str = "corr") -> PCAResult:
     std = None
     if mode == "corr":
         std = Xc.std(axis=0, ddof=1)
+        # A tenor pinned at zero (ZIRP, a stale feed) has zero variance, and
+        # dividing by it turns the column into NaN, which makes eigh fail to
+        # converge. Such a column carries no information, so leave it at zero
+        # rather than propagating NaN through the whole decomposition.
+        dead = std < 1e-12
+        if dead.any():
+            import warnings
+            warnings.warn(f"{dead.sum()} tenor(s) have zero variance and were "
+                          f"left unscaled: {[c for c, d in zip(changes.columns, dead) if d]}",
+                          RuntimeWarning)
+            std = np.where(dead, 1.0, std)
         Xc = Xc / std
     elif mode != "cov":
         raise ValueError("mode must be 'corr' or 'cov'")

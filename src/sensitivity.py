@@ -49,6 +49,10 @@ def tenor_sensitivity(levels: pd.DataFrame,
             "EVR3": res.evr[2] if len(res.evr) > 2 else np.nan,
             "cum_top3": res.evr[:3].sum(),
             "eff_rank": res.effective_rank,
+            # normalised so tenor sets of different size are comparable:
+            # raw effective rank is bounded by N, so it shrinks mechanically
+            # when you drop tenors.
+            "eff_rank_pct_of_N": res.effective_rank / len(sub),
         })
     return pd.DataFrame(rows).set_index("subset").round(4)
 
